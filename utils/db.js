@@ -1,63 +1,66 @@
-import { promisify } from 'util';
-import { createClient } from 'redis';
+import mongodb from 'mongodb';
+// eslint-disable-next-line no-unused-vars
+import Collection from 'mongodb/lib/collection';
+import envLoader from './env_loader';
 
 /**
- * Represents a Redis client.
+ * Represents a MongoDB client.
  */
-class RedisClient {
+class DBClient {
   /**
-   * Creates a new RedisClient instance.
+   * Creates a new DBClient instance.
    */
   constructor() {
-    this.client = createClient();
-    this.isClientConnected = true;
-    this.client.on('error', (err) => {
-      console.error('Redis client failed to connect:', err.message || err.toString());
-      this.isClientConnected = false;
-    });
-    this.client.on('connect', () => {
-      this.isClientConnected = true;
-    });
+    envLoader();
+    const host = process.env.DB_HOST || 'localhost';
+    const port = process.env.DB_PORT || 27017;
+    const database = process.env.DB_DATABASE || 'files_manager';
+    const dbURL = `mongodb://${host}:${port}/${database}`;
+
+    this.client = new mongodb.MongoClient(dbURL, { useUnifiedTopology: true });
+    this.client.connect();
   }
 
   /**
-   * Checks if this client's connection to the Redis server is active.
+   * Checks if this client's connection to the MongoDB server is active.
    * @returns {boolean}
    */
   isAlive() {
-    return this.isClientConnected;
+    return this.client.isConnected();
   }
 
   /**
-   * Retrieves the value of a given key.
-   * @param {String} key The key of the item to retrieve.
-   * @returns {String | Object}
+   * Retrieves the number of users in the database.
+   * @returns {Promise<Number>}
    */
-  async get(key) {
-    return promisify(this.client.GET).bind(this.client)(key);
+  async nbUsers() {
+    return this.client.db().collection('users').countDocuments();
   }
 
   /**
-   * Stores a key and its value along with an expiration time.
-   * @param {String} key The key of the item to store.
-   * @param {String | Number | Boolean} value The item to store.
-   * @param {Number} duration The expiration time of the item in seconds.
-   * @returns {Promise<void>}
+   * Retrieves the number of files in the database.
+   * @returns {Promise<Number>}
    */
-  async set(key, value, duration) {
-    await promisify(this.client.SETEX)
-      .bind(this.client)(key, duration, value);
+  async nbFiles() {
+    return this.client.db().collection('files').countDocuments();
   }
 
   /**
-   * Removes the value of a given key.
-   * @param {String} key The key of the item to remove.
-   * @returns {Promise<void>}
+   * Retrieves a reference to the `users` collection.
+   * @returns {Promise<Collection>}
    */
-  async del(key) {
-    await promisify(this.client.DEL).bind(this.client)(key);
+  async usersCollection() {
+    return this.client.db().collection('users');
+  }
+
+  /**
+   * Retrieves a reference to the `files` collection.
+   * @returns {Promise<Collection>}
+   */
+  async filesCollection() {
+    return this.client.db().collection('files');
   }
 }
 
-export const redisClient = new RedisClient();
-export default redisClient;
+export const dbClient = new DBClient();
+export default dbClient;
